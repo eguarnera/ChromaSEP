@@ -240,7 +240,7 @@ def genomeFab_intraScale_pow(fab, mappingdata, chainpadarray, cnamelist):
     return fmatpad[mappingdata[0]][:, mappingdata[0]]
 
 
-def norm_SCPN(fij, weights, delta=1.0e-10, maxiter=1000, ntype='norm'):
+def norm_SCPN_old(fij, weights, delta=1.0e-10, maxiter=1000, ntype='norm'):
   """
   f'ij = fij / |fi|  (Euclidean norm)
   f*ij = f''ij = f'ij / |fj|
@@ -261,6 +261,33 @@ def norm_SCPN(fij, weights, delta=1.0e-10, maxiter=1000, ntype='norm'):
           colnorm = np.sum(f1, axis=0)
       r = np.tile(colnorm / weights, (nparts, 1))
       f2 = f1 / r
+      d = np.sum(np.abs(f2 - f2.T)) / np.sum(np.abs(f2))
+      if d < delta:
+          return (f2 + f2.T) / 2.0 / np.outer(weights, weights)
+      else:
+          f = f2
+  print 'SCPN Not converged after %i iterations, d = %.2e .' % (maxiter, d)
+  return (f2 + f2.T) / 2.0 / np.outer(weights, weights)
+
+
+def norm_SCPN(fij, weights, delta=1.0e-10, maxiter=1000, ntype='norm'):
+  """
+  f'ij = fij / |fi|  (Euclidean norm)
+  f*ij = f''ij = f'ij / |fj|
+  Iterate to convergence
+  """
+  f = fij.copy()
+  for i in range(maxiter):
+      if ntype == 'norm':
+          rownorm = np.sqrt(np.sum(f ** 2, axis=1))
+      elif ntype == 'sum':
+          rownorm = np.sum(f, axis=1)
+      f1 = f / (rownorm / weights)[:, np.newaxis]
+      if ntype == 'norm':
+          colnorm = np.sqrt(np.sum(f1 ** 2, axis=0))
+      elif ntype == 'sum':
+          colnorm = np.sum(f1, axis=0)
+      f2 = f1 / (colnorm / weights)[np.newaxis, :]
       d = np.sum(np.abs(f2 - f2.T)) / np.sum(np.abs(f2))
       if d < delta:
           return (f2 + f2.T) / 2.0 / np.outer(weights, weights)

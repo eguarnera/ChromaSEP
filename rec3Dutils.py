@@ -54,6 +54,19 @@ def _enforce_triangleInequalityV2(distmat):
     for i in range(nbins):
         b = np.tile(d[i], (nbins, 1))
         b = b + b.T
+        d = np.minimum(d, d[i][np.newaxis, :] + d[i][:, np.newaxis])
+    return d
+
+
+def _enforce_triangleInequalityV2_old(distmat):
+    """
+    Enforce triangle inequality on distance matrix.
+    """
+    nbins = len(distmat)
+    d = distmat.copy()
+    for i in range(nbins):
+        b = np.tile(d[i], (nbins, 1))
+        b = b + b.T
         dp = np.minimum(d, b)
         if not np.allclose(d, dp):
             #print 'Merge at node', i
@@ -71,6 +84,45 @@ def _calc_CGCoordinates2(distmat):
                     for i in range(1, nbins)]) / nbins ** 2
     d02 = np.average(distmat ** 2, axis=1) - sumd2
     return d02
+
+
+def _distmat2MetricEigs_nD_v2(distmat, n, retAll=False, checkD02=True,
+                ignoreNegD02=True, ignoreNegMmat=False, assumeSymm=True,
+                takePosEvals=False):
+    """
+    From distance matrix, compute n-dimensional embedding eigensystem.
+    Returns the first n eigenvalues and coordinates when retAll = False.
+    If retAll = True, return all eigenvalues and coordinates.
+    If checkD02 = True, return error if squared-distances from CG is negative
+    for any node. Otherwise, set negative distances to 0.0
+    If ignoreNegD02 = True and checkD02 = False, proceed with computation
+    without setting begative values of d02 to 0.0.
+    """
+    nbins = len(distmat)
+    d02 = _calc_CGCoordinates2(distmat)
+    if (checkD02 and np.sum(d02 < 0.0) > 0):
+        print 'Error: Invalid distances from CG d02!'
+        return
+    else:
+        if not ignoreNegD02:
+            d02[d02 < 0.0] = 0.0
+    metricmat = (d02[:, np.newaxis] + d02[np.newaxis, :] - distmat ** 2) / 2.0
+    if assumeSymm and not np.allclose(metricmat, metricmat.T):
+        #print 'Error: metricmat is not symmetric!'
+        return
+    if not ignoreNegMmat:
+        metricmat[metricmat < 0.0] = 0.0
+    evals, evecs = eigh(metricmat,
+                    eigvals=([nbins-3, nbins-1] if takePosEvals else None)) if assumeSymm \
+                    else eig(metricmat)
+    evalorder = (np.argsort(evals)[::-1] if takePosEvals else
+                  np.argsort(np.abs(evals))[::-1])
+    inds = evalorder if retAll else evalorder[:n]
+    evals2 = evals[inds]
+    evecs2 = evecs[:, inds]
+    #for i, v in enumerate(evecs2.T):
+        #evecs2[:, i] /= np.sum(np.abs(v) ** 2)
+    return (evals2, evecs2)
 
 
 def _distmat2MetricEigs_nD(distmat, n, retAll=False, checkD02=True,
@@ -103,11 +155,12 @@ def _distmat2MetricEigs_nD(distmat, n, retAll=False, checkD02=True,
     evals, evecs = eigh(metricmat) if assumeSymm else eig(metricmat)
     evalorder = (np.argsort(evals)[::-1] if takePosEvals else
                   np.argsort(np.abs(evals))[::-1])
-    evals2 = evals[evalorder]
-    evecs2 = evecs[:, evalorder]
-    for i, v in enumerate(evecs2.T):
-        evecs2[:, i] /= np.sum(np.abs(v) ** 2)
-    return (evals2, evecs2) if retAll else (evals2[:n], evecs2[:, :n])
+    inds = evalorder if retAll else evalorder[:n]
+    evals2 = evals[inds]
+    evecs2 = evecs[:, inds]
+    #for i, v in enumerate(evecs2.T):
+        #evecs2[:, i] /= np.sum(np.abs(v) ** 2)
+    return (evals2, evecs2)
 
 
 ## Matrix norm modes
@@ -655,7 +708,7 @@ def ShRec3D_blobs_noise(fmat, psizes, radius_exp, radius_factor, noise_fracs,
     return coords, blobrad
 
 
-def alignCoords(coords, coordsr, weights=None):
+def alignCoords_old(coords, coordsr, weights=None):
     """
     Align coords to coordsr.
     """
@@ -681,6 +734,24 @@ def alignCoords(coords, coordsr, weights=None):
     igood = np.argmin(rmsdcheck)
     rotatedscaled = rmsd.kabsch_rotate(datar[igood], coordsr2)
     rotated = rotatedscaled / np.tile(weights, (3, 1)).T
+    return rotated
+
+
+def alignCoords(coords, coordsr, weights=None):
+    """
+    Align coords to coordsr.
+    """
+    if weights is None:
+      w = np.ones(len(coords))
+    else:
+      w = np.sqrt(weights)
+    data = [coords, -coords]
+    datar = [coords * w[:, np.newaxis], -coords * w[:, np.newaxis]]
+    coordsr2 = coordsr * w[:, np.newaxis]
+    rmsdcheck = [rmsd.kabsch_rmsd(c, coordsr2) for c in datar]
+    igood = np.argmin(rmsdcheck)
+    rotatedscaled = rmsd.kabsch_rotate(datar[igood], coordsr2)
+    rotated = rotatedscaled / w[:, np.newaxis]
     return rotated
 
 

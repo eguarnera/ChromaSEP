@@ -2,6 +2,7 @@
 import numpy as np
 import rec3Dutils as rtd
 import coordcomp as cc
+import time
 
 
 # Functions for reconstruction using 3DEmbed

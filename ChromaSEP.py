@@ -1,7 +1,17 @@
 
+forceserial = False
+
+import os
+
+if forceserial:
+    os.environ['MKL_NUM_THREADS'] = '1'
+    os.environ['NUMEXPR_NUM_THREADS'] = '1'
+    os.environ['OMP_NUM_THREADS'] = '1'
+
+
+
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 import sys
 import copy
 import cPickle as pickle
@@ -11,6 +21,7 @@ import scipy.cluster.hierarchy as sch
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.colors as colors
 import rmsd
+import time
 
 from ChromaWalker import ChromaWalker
 import plotutils as plu
@@ -22,17 +33,22 @@ import coordcomp as cc
 
 
 debug = True
-refineglobalrho = False
 
 ##############################
 # Interaction resampling
 
-def _resamplefmat_poisson(fmat, ratio):
-    return np.random.poisson(fmat * ratio)
+def _resamplefmat_poisson(fmat, ratio, mode=0):
+    assert ((ratio < 1.0) and (ratio > 0.0)), 'Invalid ratio %.e in _resamplefmat_poisson!' % ratio
+    if mode == 0:
+        return np.random.poisson(fmat * ratio)
+    elif mode == 1:
+        return np.maximum(0.0, fmat - np.random.poisson(fmat * (1.0 - ratio)))
+    else:
+        assert False, 'Invalid mode %i in _resamplefmat_poisson!' % mode
 
 
-def _resamplefmat_normal(fmat, ratio, round=True):
-    vals = np.random.normal(fmat, np.sqrt(fmat))
+def _resamplefmat_normal(fmat, ratio, round=False, mode=0):
+    vals = np.maximum(np.random.normal(fmat, np.sqrt(fmat)) * ratio, np.zeros_like(fmat))
     return np.round(vals) if round else vals
 
 
@@ -269,6 +285,39 @@ def _AlignCoords_IdenticalParts(coordsRef, coords, identicalInds,
     else:
         return rotcoords
 
+def _AlignCoords_IdenticalParts2(coordsRef, coords, identicalInds,
+        weights=None, getrmsd=True):
+    """
+    Align coords to coordsRef by considering only identical partitions,
+    with indices in the list identicalInds:
+      for i, j in identicalInds:
+        coords[i] corresponds to coordsRef[j]
+    Vector weights correspond to partitions in coords.
+    """
+    c1 = coords[identicalInds[:, 0]]
+    c2 = coordsRef[identicalInds[:, 1]]
+    ############################
+    if weights is None:
+        w1 = np.ones(len(c1))
+        w2 = np.ones(len(c2))
+    else:
+        w1 = np.sqrt(weights[0][identicalInds[:, 0]])
+        w2 = np.sqrt(weights[1][identicalInds[:, 1]])
+    data = [c1, -c1]
+    datar = [coords * w1[:, np.newaxis], -coords * w1[:, np.newaxis]]
+    coordsr2 = c2 * w2[:, np.newaxis]
+    rmsdcheck = [rmsd.kabsch_rmsd(c, coordsr2) for c in datar]
+    igood = np.argmin(rmsdcheck)
+    #print 'igood', igood
+    rotmat = rmsd.kabsch(datar[igood], coordsr2)
+    #print rotmat
+    #print det(rotmat)
+    rotcoords = np.dot(data[igood], rotmat)
+    if getrmsd:
+        return rotcoords, cc.RMSD(rotcoords[identicalInds[:, 0]], c2, weights=w1)
+    else:
+        return rotcoords
+
 def AlignCoords_IdenticalParts(coordsref, coords2,
                                partitionsref, partitions2,
                                psizesref, psizes2,
@@ -401,9 +450,11 @@ class ChromaSEP:
         self.rhomax = pars['rhomax']
         self.reconlabel = pars['reconlabel']
         self.sampleninterval = pars['sampleninterval']
+        self.refineglobalrho = pars['refineglobalrho']
         ## Resampling interactions
         self.resample = pars.get('resample', False)
         self.resample_ratio = pars.get('resample_ratio', 1.0)
+        self.resample_mode= pars.get('resample_mode', 0)
         self.gfilterpx = 0.0 if (pars['fijnorm'][:7] != 'gfilter') \
                              else (float(pars['fijnorm'][8:]) / self.res)
         ## Normalization
@@ -506,11 +557,11 @@ class ChromaSEP:
             minN = minN0
             while minN < maxN0:
                 # Initialize
-                thisSelection = {c: np.random.choice(self.goodNLevels_chr[c].keys()) for c in cnamelist}
+                thisSelection = {c: np.random.choice(self.goodNLevels_chr[c].keys()) for c in self.cnamelist}
                 # Stabilize
                 for i in range(nstepstabilize):
                     newSelection = copy.deepcopy(thisSelection)
-                    changeC = np.random.choice(cnamelist)
+                    changeC = np.random.choice(self.cnamelist)
                     newSelection[changeC] = np.random.choice(self.goodNLevels_chr[changeC].keys())
                     if metroStep(metroProb(thisSelection, newSelection, minN, self.goodNLevels_chr, _wholeGenomeRho, kT=kT)):
                         thisSelection = copy.deepcopy(newSelection)
@@ -575,23 +626,25 @@ class ChromaSEP:
                       cname, self.basebeta, chrnchoices[cname])
             ## Append data
             for lim, ind in zip(lims, inds):
-                if inds >= 0:
+                if ind >= 0:
                     partition_chrinds.append([cname, lim])
         return partition_chrinds
 
     def getGlobalHierarchy(self, debug=False):
         print 'Getting global structural hierarchy...'
-        # Get single-chr rho data
-        self._getAllGoodLevels(debug=debug)
-        # Get globalRhosMain
-        self._getGlobalRhosMain(debug=debug, refine=refineglobalrho)
         fname = os.path.join(self.datadir, 'globalHierarchyData.p')
-        if os.path.isfile(fname) and not refineglobalrho:
+        if os.path.isfile(fname) and not self.refineglobalrho:
             data = pickle.load(open(fname, 'r'))
             self.globalNs = data['globalNs']
             self.nchoices = data['nchoices']
             self.partitiondata = data['partitiondata']
+            # Get globalRhosMain
+            self._getGlobalRhosMain(debug=debug, refine=self.refineglobalrho)
         else:
+            # Get single-chr rho data
+            self._getAllGoodLevels(debug=debug)
+            # Get globalRhosMain
+            self._getGlobalRhosMain(debug=debug, refine=self.refineglobalrho)
             # Get global rho trend
             nlist = list(np.sort(self.globalRhosMain.keys()))
             rlist = [self.globalRhosMain[n][0] for n in nlist]
@@ -612,7 +665,7 @@ class ChromaSEP:
         self.psizes = {n: np.array([(en - st) for c, (st, en) in pd])
                           for (n, pd) in self.partitiondata.iteritems()}
         if debug:
-            print 'First level psizes:', self.psizes[0]
+            print 'First level psizes:', self.psizes[self.psizes.keys()[0]]
 
     def getBaseFab(self):
         print 'Getting unperturbed effective interaction matrix...'
@@ -646,6 +699,10 @@ class ChromaSEP:
             indsss[globalN] = indss
             membss[globalN] = membs
         print '> Getting intra-chr interaction data...'
+        if self.resample:
+            print '>>> Resampling at ratio %s' % (self.resample_ratio)
+        else:
+            print '>>> No resampling...'
         # Intra-chr
         for cname in self.cnamelist:
             # Get fmat,mappingdata
@@ -653,7 +710,11 @@ class ChromaSEP:
             mappingdata = self.cw.DFR.get_mappingdata(cname, 1.0)
             # Resample
             if self.resample:
-                fmat = _resamplefmat_poisson(fmat, self.resample_ratio)
+                countorig = np.sum(fmat)
+                fmat = _resamplefmat_poisson(fmat, self.resample_ratio, mode=self.resample_mode)
+                fmat = (fmat + fmat.T) / 2.0
+                countsample = np.sum(fmat)
+                print '>>> Sampling %s: %i / %i counts' % (cname, countsample, countorig)
             # Intra-norm
             allDist, allFij, dist, avgVsDist, nAtDist = mn.preprocess_fmat(
                       fmat, mappingdata, plot=False)
@@ -682,7 +743,7 @@ class ChromaSEP:
                 fmat, md1, md2 = self.cw.DFR.get_fmatMapdata_inter(cname1, cname2)
                 # Resample
                 if self.resample:
-                    fmat = _resamplefmat_poisson(fmat, self.resample_ratio)
+                    fmat = _resamplefmat_poisson(fmat, self.resample_ratio, mode=self.resample_mode)
                 fmatpad = plu._build_fullarray_inter(fmat, md1, md2, 0.0)
                 for globalN in self.globalNs:
                     # Get partitioning data
@@ -696,6 +757,9 @@ class ChromaSEP:
                         self.basefabs[globalN][ind, inds2] = submat[i]
                     for i, ind in enumerate(inds2):
                         self.basefabs[globalN][ind, inds1] = submat[:, i]
+        # Restore scale for Fab
+        if self.resample:
+            self.basefabs[globalN] /= self.resample_ratio
         print '> Calculated base Fab data.'
         # Remove zero-interaction partitions
         for globalN in self.globalNs:
@@ -726,6 +790,7 @@ class ChromaSEP:
         print '> Saved base Fab data.'
 
     def getBaseRecon(self):
+        self.getGlobalHierarchy(debug=False)
         print 'Getting unperturbed reconstruction at partition level...'
         fname = os.path.join(self.datadir, 'baserecons.p')
         if os.path.isfile(fname):
@@ -738,7 +803,7 @@ class ChromaSEP:
             fab = self.basefabs[globalN]
             psizes = self.psizes[globalN]
             fabp = self.normfunc(fab, psizes=psizes)
-            dab = mn.fab2dab(fabp, **embedargs)
+            dab = mn.fab2dab(fabp, **self.embedargs)
             # Get reconstruction, centered and rescaled
             coords, evals = etd.dist2Recon(dab, **self.embedargs)
             coords = cc.centerRescaleCoords(coords, self.embedargs['sizeScale'])
@@ -785,6 +850,32 @@ class ChromaSEP:
             fname = os.path.join(alphadir, 'N%03i.p' % globalN)
             if os.path.isfile(fname):
                 self.alpharecons[globalN] = pickle.load(open(fname, 'r'))
+                added = False
+                for alpha in self.alphavals:
+                    if alpha in self.alpharecons[globalN]:
+                        continue
+                    fab = self.basefabs[globalN]
+                    psizes = self.psizes[globalN]
+                    basecoords = self.baserecons[globalN]
+                    print '>>> Running alpharecons for globalN=%i, alpha=%s' % (globalN, str(alpha))
+                    self.alpharecons[globalN][alpha] = np.zeros(
+                              (self.nalphasamples, len(psizes), 3))
+                    for ipertF in range(self.nalphasamples):
+                        print 'alpharecon sample %i...' % ipertF
+                        # Perturb using alpha
+                        fab2 = fluctuateFab_multGauss(fab, alpha, minfac=0.01)
+                        # Embed partitions
+                        fabp = self.normfunc(fab2, psizes=psizes)
+                        dab = mn.fab2dab(fabp, **self.embedargs)
+                        # Get reconstruction, centered and rescaled, and aligned to baserecon
+                        coords, evals = etd.dist2Recon(dab, **self.embedargs)
+                        coords = cc.centerRescaleCoords(coords, self.embedargs['sizeScale'])
+                        coords = rtd.alignCoords(coords, basecoords, weights=psizes)
+                        self.alpharecons[globalN][alpha][ipertF] = coords
+                    added = True
+                if added:
+                    fname = os.path.join(alphadir, 'N%03i.p' % globalN)
+                    pickle.dump(self.alpharecons[globalN], open(fname, 'w'))
                 continue
             # Generate perturbed Fab and embed partitions
             self.alpharecons[globalN] = {}
@@ -796,12 +887,12 @@ class ChromaSEP:
                 self.alpharecons[globalN][alpha] = np.zeros(
                           (self.nalphasamples, len(psizes), 3))
                 for ipertF in range(self.nalphasamples):
+                    st = time.time()
                     # Perturb using alpha
                     fab2 = fluctuateFab_multGauss(fab, alpha, minfac=0.01)
                     # Embed partitions
                     fabp = self.normfunc(fab2, psizes=psizes)
                     dab = mn.fab2dab(fabp, **self.embedargs)
-                    coords, evals = etd.dist2Recon(dab, **self.embedargs)
                     # Get reconstruction, centered and rescaled, and aligned to baserecon
                     coords, evals = etd.dist2Recon(dab, **self.embedargs)
                     coords = cc.centerRescaleCoords(coords, self.embedargs['sizeScale'])
@@ -911,7 +1002,7 @@ class ChromaSEP:
                         cloudcoords2 = self.SEPrecons[globalN2][alpha]
                         n = min(len(cloudcoords1[0]), len(cloudcoords2[0]))
                         self.rmsd_interlevel[globalN1, globalN2, alpha] = \
-                            np.average([cc.RMSD(cloudcoords1[i, :n], cloudcoords2[i, :n])
+                            np.average([cc.RMSD(cloudcoords1[i2, :n], cloudcoords2[i2, :n])
                                         for i2 in range(self.nalphasamples)])
                         self.rmsd_interlevel[globalN2, globalN1, alpha] = \
                             self.rmsd_interlevel[globalN1, globalN2, alpha]
@@ -1095,11 +1186,15 @@ if __name__ == '__main__':
         'cnamelist': ['chr'+str(i) for i in range(1, 23)],  # Removing chrX
         'basebeta': 7.0,                                    # Highest common beta
         'rhomax': 0.8,                                      # The highest acceptable value for rho
-        'reconlabel': 'GM12878_primary-noX-noresample-0',   # Directory name used to store
+        'reconlabel': 'GM12878_primary-noX-noresample-1',   # Directory name used to store
         'sampleninterval': 100,                             # Interval of N at which to sample minimum rho
+        'refineglobalrho': False,                           # Whether or not to refine global rho if data exists
         # Resampling
         'resample': False,                                  # Turn on resampling of interaction counts
         'resample_ratio': 0.9,                              # Reduce interaction counts by this ratio
+        'resample_mode': 1,                                 # How to resample...
+                                                            # - 0: Poisson(original_count * resample_ratio)
+                                                            # - 1: max(1, original_count - Poisson((1-resample_ratio)*original_count))
         'fijnorm': 'gfilter_2e5',                           # Interaction normalization used in ChromaWalker
         # Normalization
         'norm': 'SCPNs',                                    # SCPNs used in paper
