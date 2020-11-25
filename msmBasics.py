@@ -8,7 +8,7 @@ Part of ChromaWalker package
 
 import numpy as np
 import sys
-from numpy.linalg import solve, cond
+from numpy.linalg import solve, cond, det, inv
 from numpy.linalg import eigvals as eigvalsnp
 
 
@@ -38,6 +38,32 @@ def _LEMAnalysis(data):
 
 
 def _calc_MFPT(fmat, loops=False):
+    """
+    Calculate Markov mean first pass time on a graph with
+        vertex weight matrix fmat.
+    If loops=False, ignore self-loops.
+    NOTE: Assumes MSM is ergodic, uses fundamental matrix method 
+		  by Kemeny & Snell.
+    """
+    nbins = fmat.shape[0]
+    if loops:
+        fmat2 = fmat.copy()
+    else:
+        fmat2 = fmat - np.diag(np.diag(fmat))
+    pvec = np.sum(fmat2, axis=1)
+    pvec /= np.sum(pvec)
+    pmat = fmat2 / np.sum(fmat2, axis=1)[:, np.newaxis]
+    zinv = np.eye(nbins) - pmat - pvec[mp/newaxis, :]
+    dval = np.abs(det(zinv))
+    if dval < 1.0e-6:
+        print('WARNING [_calc_MFPT()] : Zinv has small determinant %e!' % dval)
+    zmat = inv(zinv)
+    mmat = (np.diag(zmat)[np.newaxis, :] - zmat) / (pvec[np.newaxis, :]) + \
+			np.diag(1.0 / pvec)
+    return mmat
+
+
+def _calc_MFPT_old(fmat, loops=False):
     """
     Calculate Markov mean first pass time on a graph with
         vertex weight matrix fmat.
