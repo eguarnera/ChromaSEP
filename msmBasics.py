@@ -42,24 +42,26 @@ def _calc_MFPT(fmat, loops=False):
     Calculate Markov mean first pass time on a graph with
         vertex weight matrix fmat.
     If loops=False, ignore self-loops.
+    NOTE: Assumes MSM is ergodic, uses fundamental matrix method 
+		  by Kemeny & Snell.
     """
     nbins = fmat.shape[0]
-    # Markov transition probability
     if loops:
-        pmat = fmat.copy()
+        fmat2 = fmat.copy()
     else:
-        pmat = fmat - np.diag(np.diag(fmat))
-    for i in range(nbins):
-        pmat[i] = pmat[i] / np.sum(pmat[i])
-    # Mean first-pass times
-    mmat = np.zeros_like(pmat)
-    ## Loop across columns
-    for j in range(nbins):
-        ## Temp pmat
-        pmatt = pmat.copy()
-        pmatt[:, j] = 0.0
-        mmat[:, j] = solve(pmatt - np.eye(nbins), -np.ones(nbins))
+        fmat2 = fmat - np.diag(np.diag(fmat))
+    pvec = np.sum(fmat2, axis=1)
+    pvec /= np.sum(pvec)
+    pmat = fmat2 / np.sum(fmat2, axis=1)[:, np.newaxis]
+    zinv = np.eye(nbins) - pmat - pvec[mp/newaxis, :]
+    dval = np.abs(det(zinv))
+    if dval < 1.0e-6:
+        print('WARNING [_calc_MFPT()] : Zinv has small determinant %e!' % dval)
+    zmat = inv(zinv)
+    mmat = (np.diag(zmat)[np.newaxis, :] - zmat) / (pvec[np.newaxis, :]) + \
+			np.diag(1.0 / pvec)
     return mmat
+
 
 
 def _calc_MFPT_withLoops(fmat):
@@ -107,26 +109,30 @@ def _calc_MFPT_20160831(fmat, mapping):
     """
     Calculate Markov mean first pass time.
     """
-    nbins = fmat.shape[0]
-    # Markov transition probability
-    pmat = fmat - np.diag(np.diag(fmat))
-    for i in range(nbins):
-        pmat[i] = pmat[i] / np.sum(pmat[i])
-    # Mean first-pass times
-    mmat = np.zeros_like(pmat)
-    ## Loop across columns
-    badloci = []
-    for j in range(nbins):
-        ## Temp pmat
-        pmatt = pmat.copy()
-        pmatt[:, j] = 0.0
-        try:
-            mmat[:, j] = solve(pmatt - np.eye(nbins), -np.ones(nbins))
-        except:
-            # Singular mmat, set values to dummy
-            return np.array([[0.0]]), np.array([[0.0]]), (np.array([0]), 1)
-        if np.sum(mmat[:, j] < 0.0) > 0:
-            badloci.append(j)
+    #nbins = fmat.shape[0]
+    ## Markov transition probability
+    #pmat = fmat - np.diag(np.diag(fmat))
+    #for i in range(nbins):
+    #    pmat[i] = pmat[i] / np.sum(pmat[i])
+    ## Mean first-pass times
+    #mmat = np.zeros_like(pmat)
+    ### Loop across columns
+    #badloci = []
+    #for j in range(nbins):
+    #    ## Temp pmat
+    #    pmatt = pmat.copy()
+    #    pmatt[:, j] = 0.0
+    #    try:
+    #        mmat[:, j] = solve(pmatt - np.eye(nbins), -np.ones(nbins))
+    #    except:
+    #        # Singular mmat, set values to dummy
+    #        return np.array([[0.0]]), np.array([[0.0]]), (np.array([0]), 1)
+    #    if np.sum(mmat[:, j] < 0.0) > 0:
+    #        badloci.append(j)
+    ############################
+    mmat = _calc_MFPT(fmat, loops=False)
+    badloci = np.sort(np.nonzero(np.sum(mmat < 0.0, axis=0) > 0.0)[0])
+    ############################
     if len(badloci) > 0:
         # Modify fmat, mapping, mmat
         badloci.sort()
