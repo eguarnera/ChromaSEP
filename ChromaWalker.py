@@ -25,7 +25,6 @@ import dataFileReader as dfr
 import msmTPT as mt
 import msmTsetOpt as mto
 import epigenHandler as eh
-import optimals
 
 
 ###############################
