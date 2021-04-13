@@ -80,8 +80,10 @@ def _trialstep_random(stayat, stepfrom, allchoices):
     """
     npts = len(stayat) + len(stepfrom)
     choices = list(set(allchoices) - set(stayat) - set(stepfrom))
-    random.shuffle(choices)
-    stepto = choices[:len(stepfrom)]
+    # EDIT ZWT 2021-04-12
+    #random.shuffle(choices)
+    #stepto = choices[:len(stepfrom)]
+    stepto = random.sample(choices, len(stepfrom))
     trialset = list(set().union(stayat, stepto))
     deficit = npts - len(trialset)
     if deficit > 0:
@@ -261,13 +263,16 @@ def _ConstructTset_MCn(steppars, newrho, targetset, allchoices, cmat,
 
 
 def run_ConstructMC_fullarray(pars, steppars, meansize=1.333, initmode=False,
-                exhaustive=False, rhomode='frac'):
+                exhaustive=False, rhomode='frac', pinsteps=False, debug=False):
     """
     Run Construct-MC optimization for rho on a range of ntarget: [2, ntargetmax]
     Set ntargetmax / mappedlength ~ 0.75 Mb^-1
     Method explained in Chromatin manuscript: basically using "guided" Monte
         Carlo and "random" Monte Carlo in succession, with
         parameters defined by steppars.
+    Parameter pinsteps: Whether or not to start exploration of phase space from 
+        the known-best targetset if available. Only set to True after running a
+        few optimizer loops, to prevent zooming in too early on local minima.
     """
     res = pars['res']
     beta = pars['beta']
@@ -280,6 +285,16 @@ def run_ConstructMC_fullarray(pars, steppars, meansize=1.333, initmode=False,
     # Read cmat, fmat, mmat, mapping
     fmat, mmat, cmat, (mapping, _) = dfr._get_arrays(
                         dfr._get_runbinarydir(pars), norm=norm)
+    # If pinsteps, load current datadicts
+    if pinsteps:    
+        tsetdatadir = pars['tsetdatadir']
+        tsetdataprefix = pars['tsetdataprefix']
+        chrfullname = pars['cname']
+        region = pars.get('region', 'full')
+        rhomodesfx = mt._get_rhomodesfx(rhomode)
+        oldrhodict, oldtsetdict = hcu._get_rhotsetdicts_20160801(tsetdatadir,
+            tsetdataprefix, chrfullname, region, res,
+            hcu._get_tsetdataset2(pars), rhomodesfx=rhomodesfx)
     nbins = len(cmat)
     allchoices = range(nbins)
     # Find gamma-maximizing mapping
@@ -329,10 +344,19 @@ def run_ConstructMC_fullarray(pars, steppars, meansize=1.333, initmode=False,
     for i in range(2, ntargetmax):
         ntarget = i + 1
         st = time()
-        ### Optimize new target
-        newtarget, newrho = _trynewtarget_construct(cmat, targetset,
-                        rhofunc=rhofunc)
-        targetset.append(newtarget)
+        if pinsteps:
+            ### Load old best...
+            targetset = oldtsetdict[beta, ntarget]
+            newrho = oldrhodict[beta, ntarget]
+            if debug:
+                assert np.isclose(newrho, rhofunc(cmat, targetset)), \
+                    'Something wrong with old datadicts!'
+        else:
+            pass
+            ### Optimize new target
+            newtarget, newrho = _trynewtarget_construct(cmat, targetset,
+                            rhofunc=rhofunc)
+            targetset.append(newtarget)
         if len(targetset) != ntarget:
             print 'Error! ntarget mismatch 1!'
             sys.exit()
@@ -489,7 +513,7 @@ def _find_goodLevels(rholist, ntargetlist, mappedchrlen, rhomax=0.8,
     ntarr = np.array(ntargetlist)
     # Find minima: Ignore first and last ntarget values
     nextgreater = rhoarr[1:] > rhoarr[:-1]
-    prevgreater = rhoarr[:-1] > rhoarr[1:]
+    prevgreater = rhoarr[:-1] >= rhoarr[1:]
     minmask = np.array(nextgreater[1:] * prevgreater[:-1], dtype=bool)
     minmask = np.array(minmask * (rhoarr[1:-1] < rhomax), dtype=bool)
     ntmin = ntarr[1:-1][minmask]
@@ -967,7 +991,7 @@ class TargetOptimizer:
                             exhaustive=exhaustive, rhomode=self.rhomode)
         self.DFR.update_datadicts(cname, rd, td)
 
-    def conMC(self, cname, beta):
+    def conMC(self, cname, beta, pinsteps=False, debug=False):
         """
         Perform targetset search / optimization using ConstructMC routine.
         """
@@ -975,7 +999,8 @@ class TargetOptimizer:
         thispar['cname'] = cname
         thispar['beta'] = beta
         rd, td = run_ConstructMC_fullarray(thispar, self.steppars,
-                            meansize=self.meansize, rhomode=self.rhomode)
+                            meansize=self.meansize, rhomode=self.rhomode,
+                            pinsteps=pinsteps, debug=debug)
         return self.DFR.update_datadicts(cname, rd, td)
 
     def pSnap(self, cname, beta):

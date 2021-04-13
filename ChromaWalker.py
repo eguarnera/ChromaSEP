@@ -25,7 +25,6 @@ import dataFileReader as dfr
 import msmTPT as mt
 import msmTsetOpt as mto
 import epigenHandler as eh
-import optimals
 
 
 ###############################
@@ -540,7 +539,7 @@ class ChromaWalker:
         return self.bestbeta
 
     def tsetOptimizerLoop(self, cname, beta=None, interactive=False,
-                    maxiter=1, minupdate=1):
+                    maxiter=1, minupdate=1, pinsteps=False, debug=False):
         """
         Run TsetOptimizer in a loop, displaying analytics after each loop.
         If beta is None, optimize at corresponding goodbeta for the chromosome.
@@ -585,7 +584,8 @@ class ChromaWalker:
             nupdate = 0
             # ConstructMC
             print 'ConstructMC...'
-            nupdate += self.TOpt.conMC(cname, beta)
+            nupdate += self.TOpt.conMC(cname, beta, 
+                    pinsteps=pinsteps, debug=debug)
             # PertSnap
             print 'PertSnap...'
             nupdate += self.TOpt.pSnap(cname, beta)
@@ -1343,15 +1343,15 @@ if __name__ == '__main__':
     print
     baseres = 50000
     res = 50000
+    #cnamelist = ['chr%i' % i for i in range(1, 23)] + ['chrX', 'chrY']
     cnamelist = ['chr%i' % i for i in range(1, 23)] + ['chrX']
-    #cnamelist = ['chr%i' % i for i in range(22, 23)]# + ['chrX']
     #cnamelist = ['chr9']
     betalist = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
     #betalist = [1.0]
     allbeta = False
     norm = 'gfilter_2e5'
-    accession = 'GSE63525'
-    runlabel = 'GM12878_primary'
+    accession = 'ENCODE'
+    runlabel = 'HAP-1'
     nloop = 0
     meansize = 0.8
     rhomax = 0.8
@@ -1405,7 +1405,7 @@ if __name__ == '__main__':
     ############################################
     ### Convert interaction matrices to binary files, and compute MFPT
     ###  and hitting probability matrices
-    #cw.getAllFMCmats(allbeta=allbeta, maxdisconnected=0.5)
+    cw.getAllFMCmats(allbeta=allbeta, maxdisconnected=0.1)
     #cw._plot_allFMCmats()
     ############################################
     ### Automated targetset optimization
