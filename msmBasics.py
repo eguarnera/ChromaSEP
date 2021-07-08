@@ -8,7 +8,7 @@ Part of ChromaWalker package
 
 import numpy as np
 import sys
-from numpy.linalg import solve, cond
+from numpy.linalg import solve, cond, det, inv
 from numpy.linalg import eigvals as eigvalsnp
 
 
@@ -53,7 +53,7 @@ def _calc_MFPT(fmat, loops=False):
     pvec = np.sum(fmat2, axis=1)
     pvec /= np.sum(pvec)
     pmat = fmat2 / np.sum(fmat2, axis=1)[:, np.newaxis]
-    zinv = np.eye(nbins) - pmat - pvec[mp/newaxis, :]
+    zinv = np.eye(nbins) - pmat - pvec[np.newaxis, :]
     dval = np.abs(det(zinv))
     if dval < 1.0e-6:
         print('WARNING [_calc_MFPT()] : Zinv has small determinant %e!' % dval)
@@ -131,7 +131,7 @@ def _calc_MFPT_20160831(fmat, mapping):
     #        badloci.append(j)
     ############################
     mmat = _calc_MFPT(fmat, loops=False)
-    badloci = np.sort(np.nonzero(np.sum(mmat < 0.0, axis=0) > 0.0)[0])
+    badloci = list(np.sort(np.nonzero(np.sum(mmat < 0.0, axis=0) > 0.0)[0]))
     ############################
     if len(badloci) > 0:
         # Modify fmat, mapping, mmat
