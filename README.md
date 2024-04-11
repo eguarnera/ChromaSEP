@@ -1,11 +1,12 @@
-# ChromaSEP: Stochastic Embedding Procedure for genome ensemble reconstructions using Hi-C data #
+# ChromaSEP: Stochastic Embedding Procedure for genome ensemble 3D reconstructions using Hi-C data #
 
 ### Introduction ###
 
-* This is a Python package developed for reconstructing chromatin structural ensembles captured in ensemble Hi-C experiments.
-* The pipeline is based on a Markov-State Model analysis of the chromatin structural hierarchy, followed by spatial embedding of interaction data using classical geometry.
-* Details and capabilities of this package are detailed in our publication on Structure: Three-dimensional Chromatin Ensemble Reconstruction via Stochastic Embedding [to insert full citation]
-* This package is developed by Zhen Wah Tan of the Berezovsky Lab in Bioinformatics Institute, Agency for Science, Technology, and Research, Singapore.
+* This is a Python package developed for reconstructing chromatin 3-dimensional structural ensembles captured Hi-C data experiments.
+* The pipeline is based on a Markov-State Model analysis of the chromatin structural hierarchy (see Tan, Z. W.; Guarnera, E.; Berezovsky, I. N. Exploring Chromatin Hierarchical Organization via Markov State Modelling. PLoS Computational Biology 2018, 14 (12). https://doi.org/10.1371/journal.pcbi.1006686.
+), followed by spatial embedding of interaction data using classical distance geometry methods
+* This package is associated with the following paper: Guarnera, E.; Tan, Z. W.; Berezovsky, I. N. Three-Dimensional Chromatin Ensemble Reconstruction via Stochastic Embedding. Structure 2021, 29 (6), 622-634.e3. https://doi.org/10.1016/j.str.2021.01.008
+* This package was developed in Berezovsky Lab at the Bioinformatics Institute ASTAR (Agency for Science, Technology, and Research) Singapore.
 * This package is distributed under the MIT Licence.
 
 ### Setting up ###
