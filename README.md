@@ -1,5 +1,8 @@
 # ChromaSEP: Stochastic Embedding Procedure for genome ensemble 3D reconstructions using Hi-C data #
 
+<img width="962" alt="image" src="https://github.com/eguarnera/ChromaSEP/assets/8078280/787fedfe-84a4-4d4b-844e-d574e3b0bf33">
+
+
 ### Introduction ###
 
 * ChromaSEP is a Python package developed for reconstructing chromatin 3-dimensional structural ensembles captured from Hi-C data experiments.
