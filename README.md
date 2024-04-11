@@ -2,12 +2,11 @@
 
 ### Introduction ###
 
-* This is a Python package developed for reconstructing chromatin 3-dimensional structural ensembles captured Hi-C data experiments.
+* ChromaSEP is a Python package developed for reconstructing chromatin 3-dimensional structural ensembles captured from Hi-C data experiments.
 * The pipeline is based on a Markov-State Model analysis of the chromatin structural hierarchy (see Tan, Z. W.; Guarnera, E.; Berezovsky, I. N. Exploring Chromatin Hierarchical Organization via Markov State Modelling. PLoS Computational Biology 2018, 14 (12). https://doi.org/10.1371/journal.pcbi.1006686.
-), followed by spatial embedding of interaction data using classical distance geometry methods
-* This package is associated with the following paper: Guarnera, E.; Tan, Z. W.; Berezovsky, I. N. Three-Dimensional Chromatin Ensemble Reconstruction via Stochastic Embedding. Structure 2021, 29 (6), 622-634.e3. https://doi.org/10.1016/j.str.2021.01.008
-* This package was developed in Berezovsky Lab at the Bioinformatics Institute ASTAR (Agency for Science, Technology, and Research) Singapore.
-* This package is distributed under the MIT Licence.
+), followed by spatial embedding of interaction data using classical distance geometry methods.
+* ChromaSEP is associated with the following paper: Guarnera, E.; Tan, Z. W.; Berezovsky, I. N. Three-Dimensional Chromatin Ensemble Reconstruction via Stochastic Embedding. Structure 2021, 29 (6), 622-634.e3. https://doi.org/10.1016/j.str.2021.01.008
+* ChromaSEP is distributed under the MIT Licence.
 
 ### Setting up ###
 
@@ -31,14 +30,8 @@ Python requirements
 
 Visualizing chromatin ensembles
 
-* A useful tool for visualizing chromatin ensembles generated using the SEP routine is VMD (https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=VMD), 
-  a molecular visualization toolkit that is free for academic use.
+* A useful tool for visualizing chromatin ensembles generated using the SEP routine is VMD (https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=VMD).
 * The output VTF format for SEP reconstructions is catered for visualization on VMD.
-
-Downloading the package
-
-* The easiest way is to use `git clone`.
-	* Note that this repository contains both the ChromaWalker and ChromaSEP packages.
 
 
 ### How to use the package ###
@@ -100,6 +93,3 @@ supplying the following Python pickles in the working directory, and starting fr
 	* This is a Python dict with keys equal to the number of partitions at each selected level of hierarchy, and the corresponding values are square matrices of the effective 
 	  interaction matrices (numerically equivalent to coarse-grained interaction matrices).
 
-### Contact ###
-
-* If you encounter any difficulties with installing or running the package, please contact me (Zhen Wah) at tanzw[AT]bii.a-star.edu.sg
